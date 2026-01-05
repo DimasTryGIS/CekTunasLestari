@@ -296,39 +296,85 @@
         let namaList = [];
         let selectedNama = new Set();
         
-        // Custom arrow decorator
-        function getArrowIcon() {
-            return L.divIcon({
-                className: 'arrow-icon',
-                html: '<div style="color: #DC143C; font-size: 16px; transform: rotate(0deg);">►</div>',
-                iconSize: [20, 20],
-                iconAnchor: [10, 10]
-            });
-        }
-        
         // Load GeoJSON data
         async function loadData() {
             try {
+                console.log('Memulai load data...');
+                
+                // PERUBAHAN PENTING: Gunakan path dengan ./ untuk file lokal
                 const [sebelum, sesudah, garis] = await Promise.all([
-                    fetch('Lahan_Pengusulan.json').then(r => r.json()),
-                    fetch('Lahan_Perbaikan.json').then(r => r.json()),
-                    fetch('Garis_Perpindahan.json').then(r => r.json())
+                    fetch('./Lahan_Pengusulan.json').then(r => {
+                        if (!r.ok) throw new Error(`HTTP error! status: ${r.status}`);
+                        console.log('Lahan_Pengusulan status:', r.status);
+                        return r.json();
+                    }).catch(e => {
+                        console.error('Error loading Lahan_Pengusulan:', e);
+                        // Return GeoJSON kosong jika file tidak ditemukan
+                        return { type: 'FeatureCollection', features: [] };
+                    }),
+                    
+                    fetch('./Lahan_Perbaikan.json').then(r => {
+                        if (!r.ok) throw new Error(`HTTP error! status: ${r.status}`);
+                        console.log('Lahan_Perbaikan status:', r.status);
+                        return r.json();
+                    }).catch(e => {
+                        console.error('Error loading Lahan_Perbaikan:', e);
+                        return { type: 'FeatureCollection', features: [] };
+                    }),
+                    
+                    fetch('./Garis_Perpindahan.json').then(r => {
+                        if (!r.ok) throw new Error(`HTTP error! status: ${r.status}`);
+                        console.log('Garis_Perpindahan status:', r.status);
+                        return r.json();
+                    }).catch(e => {
+                        console.error('Error loading Garis_Perpindahan:', e);
+                        return { type: 'FeatureCollection', features: [] };
+                    })
                 ]);
+                
+                console.log('Data loaded:', {
+                    sebelum: sebelum.features?.length || 0,
+                    sesudah: sesudah.features?.length || 0,
+                    garis: garis.features?.length || 0
+                });
                 
                 allData.sebelum = sebelum;
                 allData.sesudah = sesudah;
                 allData.garis = garis;
                 
-                // Extract unique names
+                // Extract unique names dari data yang benar-benar ada
                 const names = new Set();
-                sebelum.features.forEach(f => {
-                    if (f.properties.Nama_Pekeb) {
-                        names.add(f.properties.Nama_Pekeb);
-                    }
-                });
+                
+                if (sebelum.features && sebelum.features.length > 0) {
+                    sebelum.features.forEach(f => {
+                        if (f.properties && f.properties.Nama_Pekeb) {
+                            names.add(f.properties.Nama_Pekeb);
+                        }
+                    });
+                }
+                
+                // Jika tidak ada nama dari 'sebelum', coba dari 'sesudah'
+                if (names.size === 0 && sesudah.features && sesudah.features.length > 0) {
+                    sesudah.features.forEach(f => {
+                        if (f.properties && f.properties.NAMA) {
+                            names.add(f.properties.NAMA);
+                        }
+                    });
+                }
+                
+                // Jika masih kosong, coba dari 'garis'
+                if (names.size === 0 && garis.features && garis.features.length > 0) {
+                    garis.features.forEach(f => {
+                        if (f.properties && f.properties.Nama) {
+                            names.add(f.properties.Nama);
+                        }
+                    });
+                }
                 
                 namaList = Array.from(names).sort();
                 namaList.forEach(name => selectedNama.add(name));
+                
+                console.log('Nama ditemukan:', namaList);
                 
                 renderNamaList();
                 renderLayers();
@@ -336,7 +382,8 @@
                 
             } catch (error) {
                 console.error('Error loading data:', error);
-                alert('Gagal memuat data. Pastikan file GeoJSON ada di folder yang sama dengan HTML ini.');
+                console.error('Full error:', error.stack);
+                alert('Gagal memuat data. Periksa console browser (F12) untuk detail error. Pastikan file GeoJSON ada di folder yang sama dengan HTML ini.');
             }
         }
         
@@ -384,145 +431,183 @@
             lahanSesudahLayer.clearLayers();
             garisPerpindahanLayer.clearLayers();
             
-            if (!allData.sebelum) return;
+            if (!allData.sebelum || !allData.sesudah || !allData.garis) {
+                console.log('Data belum lengkap:', {
+                    sebelum: !!allData.sebelum,
+                    sesudah: !!allData.sesudah,
+                    garis: !!allData.garis
+                });
+                return;
+            }
             
             // Lahan Sebelum
-            allData.sebelum.features.forEach(feature => {
-                const nama = feature.properties.Nama_Pekeb;
-                if (!selectedNama.has(nama)) return;
-                
-                const layer = L.geoJSON(feature, {
-                    style: {
-                        fillColor: '#F5DEB3',
-                        fillOpacity: 0.6,
-                        color: '#808080',
-                        weight: 2
+            if (allData.sebelum.features && allData.sebelum.features.length > 0) {
+                allData.sebelum.features.forEach(feature => {
+                    const nama = feature.properties?.Nama_Pekeb;
+                    if (!nama || !selectedNama.has(nama)) return;
+                    
+                    try {
+                        const layer = L.geoJSON(feature, {
+                            style: {
+                                fillColor: '#F5DEB3',
+                                fillOpacity: 0.6,
+                                color: '#808080',
+                                weight: 2
+                            }
+                        });
+                        
+                        const props = feature.properties || {};
+                        const tooltipContent = `
+                            <strong>Lahan Sebelum</strong><br>
+                            Nomor: ${props.Id_Lama || '-'}<br>
+                            Nama: ${props.Nama_Pekeb || '-'}<br>
+                            Luas SK Dirut: ${props.Luas_Ha ? props.Luas_Ha.toFixed(2) + ' Ha' : '-'}<br>
+                            Luas Persil: ${props.Luas_Persil ? props.Luas_Persil.toFixed(2) + ' Ha' : '-'}
+                        `;
+                        
+                        layer.bindTooltip(tooltipContent, {
+                            permanent: false,
+                            direction: 'top'
+                        });
+                        
+                        layer.addTo(lahanSebelumLayer);
+                    } catch (e) {
+                        console.error('Error rendering lahan sebelum:', e);
                     }
                 });
-                
-                const props = feature.properties;
-                const tooltipContent = `
-                    <strong>Lahan Sebelum</strong><br>
-                    Nomor: ${props.Id_Lama || '-'}<br>
-                    Nama: ${props.Nama_Pekeb || '-'}<br>
-                    Luas SK Dirut: ${props.Luas_Ha ? props.Luas_Ha.toFixed(2) + ' Ha' : '-'}<br>
-                    Luas Persil: ${props.Luas_Persil ? props.Luas_Persil.toFixed(2) + ' Ha' : '-'}
-                `;
-                
-                layer.bindTooltip(tooltipContent, {
-                    permanent: false,
-                    direction: 'top'
-                });
-                
-                layer.addTo(lahanSebelumLayer);
-            });
+            }
             
             // Lahan Sesudah
-            allData.sesudah.features.forEach(feature => {
-                const nama = feature.properties.NAMA;
-                if (!selectedNama.has(nama)) return;
-                
-                const layer = L.geoJSON(feature, {
-                    style: {
-                        fillColor: 'transparent',
-                        fillOpacity: 0,
-                        color: '#32CD32',
-                        weight: 2
+            if (allData.sesudah.features && allData.sesudah.features.length > 0) {
+                allData.sesudah.features.forEach(feature => {
+                    const nama = feature.properties?.NAMA;
+                    if (!nama || !selectedNama.has(nama)) return;
+                    
+                    try {
+                        const layer = L.geoJSON(feature, {
+                            style: {
+                                fillColor: 'transparent',
+                                fillOpacity: 0,
+                                color: '#32CD32',
+                                weight: 2
+                            }
+                        });
+                        
+                        const props = feature.properties || {};
+                        const tooltipContent = `
+                            <strong>Lahan Sesudah</strong><br>
+                            Nomor: ${props.Id_Lama || '-'}<br>
+                            Nama: ${props.NAMA || '-'}<br>
+                            Luas Persil: ${props.Luas_Ha ? props.Luas_Ha.toFixed(2) + ' Ha' : '-'}
+                        `;
+                        
+                        layer.bindTooltip(tooltipContent, {
+                            permanent: false,
+                            direction: 'top'
+                        });
+                        
+                        layer.addTo(lahanSesudahLayer);
+                    } catch (e) {
+                        console.error('Error rendering lahan sesudah:', e);
                     }
                 });
-                
-                const props = feature.properties;
-                const tooltipContent = `
-                    <strong>Lahan Sesudah</strong><br>
-                    Nomor: ${props.Id_Lama || '-'}<br>
-                    Nama: ${props.NAMA || '-'}<br>
-                    Luas Persil: ${props.Luas_Ha ? props.Luas_Ha.toFixed(2) + ' Ha' : '-'}
-                `;
-                
-                layer.bindTooltip(tooltipContent, {
-                    permanent: false,
-                    direction: 'top'
-                });
-                
-                layer.addTo(lahanSesudahLayer);
-            });
+            }
             
             // Garis Perpindahan with arrows
-            allData.garis.features.forEach(feature => {
-                const nama = feature.properties.Nama;
-                if (!selectedNama.has(nama)) return;
-                
-                const layer = L.geoJSON(feature, {
-                    style: {
-                        color: '#DC143C',
-                        weight: 2,
-                        opacity: 0.8
+            if (allData.garis.features && allData.garis.features.length > 0) {
+                allData.garis.features.forEach(feature => {
+                    const nama = feature.properties?.Nama;
+                    if (!nama || !selectedNama.has(nama)) return;
+                    
+                    try {
+                        const layer = L.geoJSON(feature, {
+                            style: {
+                                color: '#DC143C',
+                                weight: 2,
+                                opacity: 0.8
+                            }
+                        });
+                        
+                        const props = feature.properties || {};
+                        const tooltipContent = `
+                            <strong>Garis Perpindahan</strong><br>
+                            Nomor: ${props.Id_Lama || '-'}<br>
+                            Nama: ${props.Nama || '-'}<br>
+                            Jarak Pindah: ${props.Jarak ? props.Jarak.toFixed(2) + ' m' : '-'}
+                        `;
+                        
+                        layer.bindTooltip(tooltipContent, {
+                            permanent: false,
+                            direction: 'top'
+                        });
+                        
+                        layer.addTo(garisPerpindahanLayer);
+                        
+                        // Add arrow at the end of line
+                        if (feature.geometry && feature.geometry.type === 'LineString' && feature.geometry.coordinates.length > 1) {
+                            const coords = feature.geometry.coordinates;
+                            const lastCoord = coords[coords.length - 1];
+                            const secondLastCoord = coords[coords.length - 2];
+                            
+                            // Calculate angle
+                            const angle = Math.atan2(
+                                lastCoord[1] - secondLastCoord[1],
+                                lastCoord[0] - secondLastCoord[0]
+                            ) * 180 / Math.PI;
+                            
+                            const arrowMarker = L.marker([lastCoord[1], lastCoord[0]], {
+                                icon: L.divIcon({
+                                    className: 'arrow-icon',
+                                    html: `<div style="color: #DC143C; font-size: 16px; transform: rotate(${angle}deg);">►</div>`,
+                                    iconSize: [20, 20],
+                                    iconAnchor: [5, 10]
+                                })
+                            });
+                            
+                            arrowMarker.addTo(garisPerpindahanLayer);
+                        }
+                    } catch (e) {
+                        console.error('Error rendering garis perpindahan:', e);
                     }
                 });
-                
-                const props = feature.properties;
-                const tooltipContent = `
-                    <strong>Garis Perpindahan</strong><br>
-                    Nomor: ${props.Id_Lama || '-'}<br>
-                    Nama: ${props.Nama || '-'}<br>
-                    Jarak Pindah: ${props.Jarak ? props.Jarak.toFixed(2) + ' m' : '-'}
-                `;
-                
-                layer.bindTooltip(tooltipContent, {
-                    permanent: false,
-                    direction: 'top'
-                });
-                
-                layer.addTo(garisPerpindahanLayer);
-                
-                // Add arrow at the end of line
-                if (feature.geometry.type === 'LineString' && feature.geometry.coordinates.length > 1) {
-                    const coords = feature.geometry.coordinates;
-                    const lastCoord = coords[coords.length - 1];
-                    const secondLastCoord = coords[coords.length - 2];
-                    
-                    // Calculate angle
-                    const angle = Math.atan2(
-                        lastCoord[1] - secondLastCoord[1],
-                        lastCoord[0] - secondLastCoord[0]
-                    ) * 180 / Math.PI;
-                    
-                    const arrowMarker = L.marker([lastCoord[1], lastCoord[0]], {
-                        icon: L.divIcon({
-                            className: 'arrow-icon',
-                            html: `<div style="color: #DC143C; font-size: 16px; transform: rotate(${angle}deg);">►</div>`,
-                            iconSize: [20, 20],
-                            iconAnchor: [5, 10]
-                        })
-                    });
-                    
-                    arrowMarker.addTo(garisPerpindahanLayer);
-                }
+            }
+            
+            console.log('Layers rendered:', {
+                sebelum: lahanSebelumLayer.getLayers().length,
+                sesudah: lahanSesudahLayer.getLayers().length,
+                garis: garisPerpindahanLayer.getLayers().length
             });
         }
         
         // Update summary
         function updateSummary() {
-            if (!allData.garis) return;
+            if (!allData.garis || !allData.garis.features) {
+                document.getElementById('totalLahan').textContent = '-';
+                document.getElementById('rataJarak').textContent = '-';
+                document.getElementById('totalLuas').textContent = '-';
+                return;
+            }
             
             const filteredGaris = allData.garis.features.filter(f => 
-                selectedNama.has(f.properties.Nama)
+                f.properties && f.properties.Nama && selectedNama.has(f.properties.Nama)
             );
             
             const totalLahan = filteredGaris.length;
             
             let totalJarak = 0;
             filteredGaris.forEach(f => {
-                if (f.properties.Jarak) {
+                if (f.properties && f.properties.Jarak) {
                     totalJarak += f.properties.Jarak;
                 }
             });
             const rataJarak = totalLahan > 0 ? totalJarak / totalLahan : 0;
             
             let totalLuas = 0;
-            if (allData.sebelum) {
+            if (allData.sebelum && allData.sebelum.features) {
                 allData.sebelum.features.forEach(f => {
-                    if (selectedNama.has(f.properties.Nama_Pekeb) && f.properties.Luas_Ha) {
+                    if (f.properties && f.properties.Nama_Pekeb && 
+                        selectedNama.has(f.properties.Nama_Pekeb) && 
+                        f.properties.Luas_Ha) {
                         totalLuas += f.properties.Luas_Ha;
                     }
                 });
