@@ -296,16 +296,33 @@
         let namaList = [];
         let selectedNama = new Set();
         
+        // Fungsi untuk mengambil nama dari feature dengan prioritas berbeda
+        function getNamaFromFeature(feature, source) {
+            const props = feature.properties || {};
+            
+            if (source === 'sebelum') {
+                // Untuk Lahan Sebelum: NAMA_1 > NAMA > Nama_Pekeb
+                return props.NAMA_1 || props.NAMA || props.Nama_Pekeb || props.Nama || props.nama;
+            } else if (source === 'sesudah') {
+                // Untuk Lahan Sesudah: NAMA
+                return props.NAMA || props.Nama || props.nama;
+            } else if (source === 'garis') {
+                // Untuk Garis Perpindahan: Nama > NAMA
+                return props.Nama || props.NAMA || props.nama;
+            }
+            
+            // Fallback umum
+            return props.NAMA || props.Nama || props.nama || props.Nama_Pekeb || props.NAMA_1;
+        }
+        
         // Load GeoJSON data
         async function loadData() {
             try {
                 console.log('Memulai load data...');
                 
-                // Load data dengan path yang benar untuk GitHub Pages
                 const [sebelum, sesudah, garis] = await Promise.all([
                     fetch('./Lahan_Pengusulan.json').then(r => {
                         if (!r.ok) throw new Error(`HTTP error! status: ${r.status}`);
-                        console.log('Lahan_Pengusulan status:', r.status);
                         return r.json();
                     }).catch(e => {
                         console.error('Error loading Lahan_Pengusulan:', e);
@@ -314,7 +331,6 @@
                     
                     fetch('./Lahan_Perbaikan.json').then(r => {
                         if (!r.ok) throw new Error(`HTTP error! status: ${r.status}`);
-                        console.log('Lahan_Perbaikan status:', r.status);
                         return r.json();
                     }).catch(e => {
                         console.error('Error loading Lahan_Perbaikan:', e);
@@ -323,7 +339,6 @@
                     
                     fetch('./Garis_Perpindahan.json').then(r => {
                         if (!r.ok) throw new Error(`HTTP error! status: ${r.status}`);
-                        console.log('Garis_Perpindahan status:', r.status);
                         return r.json();
                     }).catch(e => {
                         console.error('Error loading Garis_Perpindahan:', e);
@@ -337,54 +352,39 @@
                     garis: garis.features?.length || 0
                 });
                 
-                // Debug: lihat properti pertama dari setiap data
-                if (sebelum.features && sebelum.features.length > 0) {
-                    console.log('Sample feature dari Lahan_Pengusulan:', sebelum.features[0].properties);
-                }
-                if (sesudah.features && sesudah.features.length > 0) {
-                    console.log('Sample feature dari Lahan_Perbaikan:', sesudah.features[0].properties);
-                }
-                if (garis.features && garis.features.length > 0) {
-                    console.log('Sample feature dari Garis_Perpindahan:', garis.features[0].properties);
-                }
-                
                 allData.sebelum = sebelum;
                 allData.sesudah = sesudah;
                 allData.garis = garis;
                 
-                // Extract unique names - SEKARANG SEMUA DARI PROPERTI 'NAMA'
+                // Extract unique names dari semua data
                 const names = new Set();
                 
-                // Dari Lahan Sebelum - ambil dari NAMA
+                // Dari Lahan Sebelum - gunakan NAMA_1 sebagai prioritas
                 if (sebelum.features && sebelum.features.length > 0) {
                     sebelum.features.forEach(f => {
-                        if (f.properties && f.properties.NAMA) {
-                            names.add(f.properties.NAMA);
-                            console.log('Nama dari Lahan Sebelum:', f.properties.NAMA);
-                        } else if (f.properties && f.properties.Nama_Pekeb) {
-                            // Fallback jika masih ada Nama_Pekeb
-                            names.add(f.properties.Nama_Pekeb);
-                            console.log('Nama dari Lahan Sebelum (fallback):', f.properties.Nama_Pekeb);
+                        const nama = getNamaFromFeature(f, 'sebelum');
+                        if (nama) {
+                            names.add(nama.trim());
                         }
                     });
                 }
                 
-                // Dari Lahan Sesudah - ambil dari NAMA
+                // Dari Lahan Sesudah
                 if (sesudah.features && sesudah.features.length > 0) {
                     sesudah.features.forEach(f => {
-                        if (f.properties && f.properties.NAMA) {
-                            names.add(f.properties.NAMA);
-                            console.log('Nama dari Lahan Sesudah:', f.properties.NAMA);
+                        const nama = getNamaFromFeature(f, 'sesudah');
+                        if (nama) {
+                            names.add(nama.trim());
                         }
                     });
                 }
                 
-                // Dari Garis Perpindahan - ambil dari Nama (perhatikan huruf kapitalnya)
+                // Dari Garis Perpindahan
                 if (garis.features && garis.features.length > 0) {
                     garis.features.forEach(f => {
-                        if (f.properties && f.properties.Nama) {
-                            names.add(f.properties.Nama);
-                            console.log('Nama dari Garis Perpindahan:', f.properties.Nama);
+                        const nama = getNamaFromFeature(f, 'garis');
+                        if (nama) {
+                            names.add(nama.trim());
                         }
                     });
                 }
@@ -392,8 +392,7 @@
                 namaList = Array.from(names).sort();
                 namaList.forEach(name => selectedNama.add(name));
                 
-                console.log('Semua nama yang ditemukan:', namaList);
-                console.log('Jumlah nama:', namaList.length);
+                console.log('Nama ditemukan:', namaList.length, 'nama');
                 
                 renderNamaList();
                 renderLayers();
@@ -401,7 +400,6 @@
                 
             } catch (error) {
                 console.error('Error loading data:', error);
-                console.error('Full error:', error.stack);
                 alert('Gagal memuat data. Periksa console browser (F12) untuk detail error.');
             }
         }
@@ -444,37 +442,21 @@
             });
         }
         
-        // Render layers - DIUBAH UNTUK MENGGUNAKAN 'NAMA'
+        // Render layers
         function renderLayers() {
             lahanSebelumLayer.clearLayers();
             lahanSesudahLayer.clearLayers();
             garisPerpindahanLayer.clearLayers();
             
             if (!allData.sebelum || !allData.sesudah || !allData.garis) {
-                console.log('Data belum lengkap');
                 return;
             }
             
-            console.log('Rendering layers dengan nama terpilih:', Array.from(selectedNama));
-            
-            // Lahan Sebelum - SEKARANG PAKAI 'NAMA'
+            // Lahan Sebelum - MENGGUNAKAN NAMA_1
             if (allData.sebelum.features && allData.sebelum.features.length > 0) {
-                console.log('Total features di Lahan Sebelum:', allData.sebelum.features.length);
-                
-                let renderedSebelum = 0;
                 allData.sebelum.features.forEach(feature => {
-                    // Ambil dari NAMA (atau fallback ke Nama_Pekeb)
-                    const nama = feature.properties?.NAMA || feature.properties?.Nama_Pekeb;
-                    
-                    if (!nama) {
-                        console.log('Feature tanpa nama:', feature.properties);
-                        return;
-                    }
-                    
-                    if (!selectedNama.has(nama)) {
-                        console.log(`Skip lahan sebelum: ${nama} (tidak terpilih)`);
-                        return;
-                    }
+                    const nama = getNamaFromFeature(feature, 'sebelum');
+                    if (!nama || !selectedNama.has(nama)) return;
                     
                     try {
                         const layer = L.geoJSON(feature, {
@@ -489,10 +471,10 @@
                         const props = feature.properties || {};
                         const tooltipContent = `
                             <strong>Lahan Sebelum</strong><br>
-                            Nomor: ${props.Id_Lama || props.id || '-'}<br>
                             Nama: ${nama}<br>
                             Luas: ${props.Luas_HA ? props.Luas_HA.toFixed(2) + ' Ha' : 
-                                   props.LUAS ? props.LUAS + ' Ha' : '-'}
+                                   props.LUAS ? props.LUAS + ' Ha' : '-'}<br>
+                            Alamat: ${props.ALAMAT || '-'}
                         `;
                         
                         layer.bindTooltip(tooltipContent, {
@@ -501,22 +483,17 @@
                         });
                         
                         layer.addTo(lahanSebelumLayer);
-                        renderedSebelum++;
-                        console.log(`✓ Lahan Sebelum ditampilkan: ${nama}`);
+                        
                     } catch (e) {
                         console.error('Error rendering lahan sebelum:', e);
                     }
                 });
-                console.log(`Lahan Sebelum yang ditampilkan: ${renderedSebelum}`);
             }
             
-            // Lahan Sesudah - PAKAI 'NAMA'
+            // Lahan Sesudah
             if (allData.sesudah.features && allData.sesudah.features.length > 0) {
-                console.log('Total features di Lahan Sesudah:', allData.sesudah.features.length);
-                
-                let renderedSesudah = 0;
                 allData.sesudah.features.forEach(feature => {
-                    const nama = feature.properties?.NAMA;
+                    const nama = getNamaFromFeature(feature, 'sesudah');
                     if (!nama || !selectedNama.has(nama)) return;
                     
                     try {
@@ -532,7 +509,6 @@
                         const props = feature.properties || {};
                         const tooltipContent = `
                             <strong>Lahan Sesudah</strong><br>
-                            Nomor: ${props.Id_Lama || props.id || '-'}<br>
                             Nama: ${nama}<br>
                             Luas: ${props.Luas_Ha ? props.Luas_Ha.toFixed(2) + ' Ha' : '-'}
                         `;
@@ -543,22 +519,17 @@
                         });
                         
                         layer.addTo(lahanSesudahLayer);
-                        renderedSesudah++;
-                        console.log(`✓ Lahan Sesudah ditampilkan: ${nama}`);
+                        
                     } catch (e) {
                         console.error('Error rendering lahan sesudah:', e);
                     }
                 });
-                console.log(`Lahan Sesudah yang ditampilkan: ${renderedSesudah}`);
             }
             
-            // Garis Perpindahan - PAKAI 'Nama' (perhatikan huruf kapitalnya)
+            // Garis Perpindahan
             if (allData.garis.features && allData.garis.features.length > 0) {
-                console.log('Total features di Garis Perpindahan:', allData.garis.features.length);
-                
-                let renderedGaris = 0;
                 allData.garis.features.forEach(feature => {
-                    const nama = feature.properties?.Nama;
+                    const nama = getNamaFromFeature(feature, 'garis');
                     if (!nama || !selectedNama.has(nama)) return;
                     
                     try {
@@ -573,9 +544,8 @@
                         const props = feature.properties || {};
                         const tooltipContent = `
                             <strong>Garis Perpindahan</strong><br>
-                            Nomor: ${props.Id_Lama || props.id || '-'}<br>
                             Nama: ${nama}<br>
-                            Jarak Pindah: ${props.Jarak ? props.Jarak.toFixed(2) + ' m' : '-'}
+                            Jarak: ${props.Jarak ? props.Jarak.toFixed(2) + ' m' : '-'}
                         `;
                         
                         layer.bindTooltip(tooltipContent, {
@@ -584,15 +554,13 @@
                         });
                         
                         layer.addTo(garisPerpindahanLayer);
-                        renderedGaris++;
                         
-                        // Add arrow at the end of line
+                        // Add arrow
                         if (feature.geometry && feature.geometry.type === 'LineString' && feature.geometry.coordinates.length > 1) {
                             const coords = feature.geometry.coordinates;
                             const lastCoord = coords[coords.length - 1];
                             const secondLastCoord = coords[coords.length - 2];
                             
-                            // Calculate angle
                             const angle = Math.atan2(
                                 lastCoord[1] - secondLastCoord[1],
                                 lastCoord[0] - secondLastCoord[0]
@@ -610,22 +578,20 @@
                             arrowMarker.addTo(garisPerpindahanLayer);
                         }
                         
-                        console.log(`✓ Garis Perpindahan ditampilkan: ${nama}`);
                     } catch (e) {
                         console.error('Error rendering garis perpindahan:', e);
                     }
                 });
-                console.log(`Garis Perpindahan yang ditampilkan: ${renderedGaris}`);
             }
             
-            console.log('Total layers di map:', {
+            console.log('Layers rendered:', {
                 sebelum: lahanSebelumLayer.getLayers().length,
                 sesudah: lahanSesudahLayer.getLayers().length,
                 garis: garisPerpindahanLayer.getLayers().length
             });
         }
         
-        // Update summary - DIUBAH UNTUK MENGGUNAKAN 'NAMA'
+        // Update summary
         function updateSummary() {
             if (!allData.garis || !allData.garis.features) {
                 document.getElementById('totalLahan').textContent = '-';
@@ -634,9 +600,10 @@
                 return;
             }
             
-            const filteredGaris = allData.garis.features.filter(f => 
-                f.properties && f.properties.Nama && selectedNama.has(f.properties.Nama)
-            );
+            const filteredGaris = allData.garis.features.filter(f => {
+                const nama = getNamaFromFeature(f, 'garis');
+                return nama && selectedNama.has(nama);
+            });
             
             const totalLahan = filteredGaris.length;
             
@@ -651,11 +618,8 @@
             let totalLuas = 0;
             if (allData.sebelum && allData.sebelum.features) {
                 allData.sebelum.features.forEach(f => {
-                    // Ambil nama dari NAMA atau Nama_Pekeb
-                    const nama = f.properties?.NAMA || f.properties?.Nama_Pekeb;
-                    
+                    const nama = getNamaFromFeature(f, 'sebelum');
                     if (nama && selectedNama.has(nama)) {
-                        // Coba beberapa kemungkinan properti luas
                         const luas = f.properties?.Luas_HA || f.properties?.Luas_Ha || f.properties?.LUAS;
                         if (luas) {
                             totalLuas += parseFloat(luas) || 0;
