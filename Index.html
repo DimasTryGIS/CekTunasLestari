@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebGIS Perpindahan Lahan</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+        }
+        
+        #map {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 1;
+        }
+        
+        .control-panel {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            max-width: 300px;
+            max-height: calc(100vh - 20px);
+            overflow-y: auto;
+            z-index: 1000;
+        }
+        
+        .control-panel h3 {
+            margin-bottom: 10px;
+            color: #333;
+            font-size: 16px;
+            border-bottom: 2px solid #4CAF50;
+            padding-bottom: 5px;
+        }
+        
+        .basemap-control, .layer-control, .nama-control {
+            margin-bottom: 15px;
+        }
+        
+        .basemap-control select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .checkbox-group {
+            margin-top: 10px;
+        }
+        
+        .checkbox-item {
+            margin: 5px 0;
+            display: flex;
+            align-items: center;
+        }
+        
+        .checkbox-item input[type="checkbox"] {
+            margin-right: 8px;
+            cursor: pointer;
+        }
+        
+        .checkbox-item label {
+            cursor: pointer;
+            font-size: 14px;
+            color: #555;
+        }
+        
+        .select-all {
+            font-weight: bold;
+            color: #4CAF50;
+        }
+        
+        .search-box {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+        
+        .nama-list {
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #eee;
+            border-radius: 4px;
+            padding: 5px;
+        }
+        
+        .legend {
+            position: absolute;
+            bottom: 30px;
+            right: 10px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            z-index: 1000;
+        }
+        
+        .legend h4 {
+            margin-bottom: 10px;
+            font-size: 14px;
+            color: #333;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 5px 0;
+            font-size: 13px;
+        }
+        
+        .legend-color {
+            width: 30px;
+            height: 15px;
+            margin-right: 8px;
+            border: 1px solid #333;
+        }
+        
+        .legend-line {
+            width: 30px;
+            height: 3px;
+            margin-right: 8px;
+            position: relative;
+        }
+        
+        .legend-line::after {
+            content: '►';
+            position: absolute;
+            right: -8px;
+            top: -8px;
+            font-size: 10px;
+            color: #DC143C;
+        }
+        
+        .summary-panel {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            z-index: 1000;
+            min-width: 200px;
+        }
+        
+        .summary-panel h4 {
+            margin-bottom: 10px;
+            font-size: 14px;
+            color: #333;
+            border-bottom: 2px solid #4CAF50;
+            padding-bottom: 5px;
+        }
+        
+        .summary-item {
+            margin: 5px 0;
+            font-size: 13px;
+            color: #555;
+        }
+        
+        .summary-item strong {
+            color: #333;
+        }
+        
+        .leaflet-tooltip {
+            background-color: rgba(255, 255, 255, 0.95);
+            border: 1px solid #999;
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        
+        .leaflet-tooltip strong {
+            color: #4CAF50;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    
+    <div class="control-panel">
+        <h3>🗺️ Kontrol Peta</h3>
+        
+        <div class="basemap-control">
+            <label><strong>Basemap:</strong></label>
+            <select id="basemapSelect">
+                <option value="osm">OpenStreetMap</option>
+                <option value="satellite">Satelit</option>
+            </select>
+        </div>
+        
+        <div class="layer-control">
+            <label><strong>Layer:</strong></label>
+            <div class="checkbox-group">
+                <div class="checkbox-item">
+                    <input type="checkbox" id="selectAllLayers" checked>
+                    <label for="selectAllLayers" class="select-all">Select All</label>
+                </div>
+                <div class="checkbox-item">
+                    <input type="checkbox" id="layerSebelum" checked>
+                    <label for="layerSebelum">Lahan Sebelum</label>
+                </div>
+                <div class="checkbox-item">
+                    <input type="checkbox" id="layerSesudah" checked>
+                    <label for="layerSesudah">Lahan Sesudah</label>
+                </div>
+                <div class="checkbox-item">
+                    <input type="checkbox" id="layerGaris" checked>
+                    <label for="layerGaris">Garis Perpindahan</label>
+                </div>
+            </div>
+        </div>
+        
+        <div class="nama-control">
+            <label><strong>Filter Nama:</strong></label>
+            <input type="text" id="searchNama" class="search-box" placeholder="Cari nama...">
+            <div class="checkbox-group">
+                <div class="checkbox-item">
+                    <input type="checkbox" id="selectAllNama" checked>
+                    <label for="selectAllNama" class="select-all">Select All</label>
+                </div>
+            </div>
+            <div id="namaList" class="nama-list"></div>
+        </div>
+    </div>
+    
+    <div class="summary-panel">
+        <h4>📊 Ringkasan</h4>
+        <div class="summary-item">Total Lahan: <strong id="totalLahan">-</strong></div>
+        <div class="summary-item">Rata-rata Jarak: <strong id="rataJarak">-</strong></div>
+        <div class="summary-item">Total Luas: <strong id="totalLuas">-</strong></div>
+    </div>
+    
+    <div class="legend">
+        <h4>Keterangan</h4>
+        <div class="legend-item">
+            <div class="legend-color" style="background-color: #F5DEB3; border-color: #808080;"></div>
+            <span>Lahan Sebelum</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background-color: transparent; border-color: #32CD32; border-width: 2px;"></div>
+            <span>Lahan Sesudah</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-line" style="background-color: #DC143C;"></div>
+            <span>Garis Perpindahan</span>
+        </div>
+    </div>
+    
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // Inisialisasi peta
+        const map = L.map('map').setView([-1.97, 119.40], 13);
+        
+        // Basemap layers
+        const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        });
+        
+        const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            attribution: 'Tiles &copy; Esri'
+        });
+        
+        osmLayer.addTo(map);
+        
+        // Layer groups
+        let lahanSebelumLayer = L.layerGroup().addTo(map);
+        let lahanSesudahLayer = L.layerGroup().addTo(map);
+        let garisPerpindahanLayer = L.layerGroup().addTo(map);
+        
+        let allData = {
+            sebelum: null,
+            sesudah: null,
+            garis: null
+        };
+        
+        let namaList = [];
+        let selectedNama = new Set();
+        
+        // Custom arrow decorator
+        function getArrowIcon() {
+            return L.divIcon({
+                className: 'arrow-icon',
+                html: '<div style="color: #DC143C; font-size: 16px; transform: rotate(0deg);">►</div>',
+                iconSize: [20, 20],
+                iconAnchor: [10, 10]
+            });
+        }
+        
+        // Load GeoJSON data
+        async function loadData() {
+            try {
+                const [sebelum, sesudah, garis] = await Promise.all([
+                    fetch('Lahan_Pengusulan.json').then(r => r.json()),
+                    fetch('Lahan_Perbaikan.json').then(r => r.json()),
+                    fetch('Garis_Perpindahan.json').then(r => r.json())
+                ]);
+                
+                allData.sebelum = sebelum;
+                allData.sesudah = sesudah;
+                allData.garis = garis;
+                
+                // Extract unique names
+                const names = new Set();
+                sebelum.features.forEach(f => {
+                    if (f.properties.Nama_Pekeb) {
+                        names.add(f.properties.Nama_Pekeb);
+                    }
+                });
+                
+                namaList = Array.from(names).sort();
+                namaList.forEach(name => selectedNama.add(name));
+                
+                renderNamaList();
+                renderLayers();
+                updateSummary();
+                
+            } catch (error) {
+                console.error('Error loading data:', error);
+                alert('Gagal memuat data. Pastikan file GeoJSON ada di folder yang sama dengan HTML ini.');
+            }
+        }
+        
+        // Render nama list
+        function renderNamaList() {
+            const container = document.getElementById('namaList');
+            container.innerHTML = '';
+            
+            const searchTerm = document.getElementById('searchNama').value.toLowerCase();
+            const filteredNames = namaList.filter(name => 
+                name.toLowerCase().includes(searchTerm)
+            );
+            
+            filteredNames.forEach(name => {
+                const div = document.createElement('div');
+                div.className = 'checkbox-item';
+                
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.id = `nama_${name}`;
+                checkbox.checked = selectedNama.has(name);
+                checkbox.addEventListener('change', () => {
+                    if (checkbox.checked) {
+                        selectedNama.add(name);
+                    } else {
+                        selectedNama.delete(name);
+                    }
+                    renderLayers();
+                    updateSelectAllNama();
+                });
+                
+                const label = document.createElement('label');
+                label.htmlFor = `nama_${name}`;
+                label.textContent = name;
+                
+                div.appendChild(checkbox);
+                div.appendChild(label);
+                container.appendChild(div);
+            });
+        }
+        
+        // Render layers
+        function renderLayers() {
+            lahanSebelumLayer.clearLayers();
+            lahanSesudahLayer.clearLayers();
+            garisPerpindahanLayer.clearLayers();
+            
+            if (!allData.sebelum) return;
+            
+            // Lahan Sebelum
+            allData.sebelum.features.forEach(feature => {
+                const nama = feature.properties.Nama_Pekeb;
+                if (!selectedNama.has(nama)) return;
+                
+                const layer = L.geoJSON(feature, {
+                    style: {
+                        fillColor: '#F5DEB3',
+                        fillOpacity: 0.6,
+                        color: '#808080',
+                        weight: 2
+                    }
+                });
+                
+                const props = feature.properties;
+                const tooltipContent = `
+                    <strong>Lahan Sebelum</strong><br>
+                    Nomor: ${props.Id_Lama || '-'}<br>
+                    Nama: ${props.Nama_Pekeb || '-'}<br>
+                    Luas SK Dirut: ${props.Luas_Ha ? props.Luas_Ha.toFixed(2) + ' Ha' : '-'}<br>
+                    Luas Persil: ${props.Luas_Persil ? props.Luas_Persil.toFixed(2) + ' Ha' : '-'}
+                `;
+                
+                layer.bindTooltip(tooltipContent, {
+                    permanent: false,
+                    direction: 'top'
+                });
+                
+                layer.addTo(lahanSebelumLayer);
+            });
+            
+            // Lahan Sesudah
+            allData.sesudah.features.forEach(feature => {
+                const nama = feature.properties.NAMA;
+                if (!selectedNama.has(nama)) return;
+                
+                const layer = L.geoJSON(feature, {
+                    style: {
+                        fillColor: 'transparent',
+                        fillOpacity: 0,
+                        color: '#32CD32',
+                        weight: 2
+                    }
+                });
+                
+                const props = feature.properties;
+                const tooltipContent = `
+                    <strong>Lahan Sesudah</strong><br>
+                    Nomor: ${props.Id_Lama || '-'}<br>
+                    Nama: ${props.NAMA || '-'}<br>
+                    Luas Persil: ${props.Luas_Ha ? props.Luas_Ha.toFixed(2) + ' Ha' : '-'}
+                `;
+                
+                layer.bindTooltip(tooltipContent, {
+                    permanent: false,
+                    direction: 'top'
+                });
+                
+                layer.addTo(lahanSesudahLayer);
+            });
+            
+            // Garis Perpindahan with arrows
+            allData.garis.features.forEach(feature => {
+                const nama = feature.properties.Nama;
+                if (!selectedNama.has(nama)) return;
+                
+                const layer = L.geoJSON(feature, {
+                    style: {
+                        color: '#DC143C',
+                        weight: 2,
+                        opacity: 0.8
+                    }
+                });
+                
+                const props = feature.properties;
+                const tooltipContent = `
+                    <strong>Garis Perpindahan</strong><br>
+                    Nomor: ${props.Id_Lama || '-'}<br>
+                    Nama: ${props.Nama || '-'}<br>
+                    Jarak Pindah: ${props.Jarak ? props.Jarak.toFixed(2) + ' m' : '-'}
+                `;
+                
+                layer.bindTooltip(tooltipContent, {
+                    permanent: false,
+                    direction: 'top'
+                });
+                
+                layer.addTo(garisPerpindahanLayer);
+                
+                // Add arrow at the end of line
+                if (feature.geometry.type === 'LineString' && feature.geometry.coordinates.length > 1) {
+                    const coords = feature.geometry.coordinates;
+                    const lastCoord = coords[coords.length - 1];
+                    const secondLastCoord = coords[coords.length - 2];
+                    
+                    // Calculate angle
+                    const angle = Math.atan2(
+                        lastCoord[1] - secondLastCoord[1],
+                        lastCoord[0] - secondLastCoord[0]
+                    ) * 180 / Math.PI;
+                    
+                    const arrowMarker = L.marker([lastCoord[1], lastCoord[0]], {
+                        icon: L.divIcon({
+                            className: 'arrow-icon',
+                            html: `<div style="color: #DC143C; font-size: 16px; transform: rotate(${angle}deg);">►</div>`,
+                            iconSize: [20, 20],
+                            iconAnchor: [5, 10]
+                        })
+                    });
+                    
+                    arrowMarker.addTo(garisPerpindahanLayer);
+                }
+            });
+        }
+        
+        // Update summary
+        function updateSummary() {
+            if (!allData.garis) return;
+            
+            const filteredGaris = allData.garis.features.filter(f => 
+                selectedNama.has(f.properties.Nama)
+            );
+            
+            const totalLahan = filteredGaris.length;
+            
+            let totalJarak = 0;
+            filteredGaris.forEach(f => {
+                if (f.properties.Jarak) {
+                    totalJarak += f.properties.Jarak;
+                }
+            });
+            const rataJarak = totalLahan > 0 ? totalJarak / totalLahan : 0;
+            
+            let totalLuas = 0;
+            if (allData.sebelum) {
+                allData.sebelum.features.forEach(f => {
+                    if (selectedNama.has(f.properties.Nama_Pekeb) && f.properties.Luas_Ha) {
+                        totalLuas += f.properties.Luas_Ha;
+                    }
+                });
+            }
+            
+            document.getElementById('totalLahan').textContent = totalLahan;
+            document.getElementById('rataJarak').textContent = rataJarak.toFixed(2) + ' m';
+            document.getElementById('totalLuas').textContent = totalLuas.toFixed(2) + ' Ha';
+        }
+        
+        // Basemap control
+        document.getElementById('basemapSelect').addEventListener('change', (e) => {
+            if (e.target.value === 'osm') {
+                map.removeLayer(satelliteLayer);
+                map.addLayer(osmLayer);
+            } else {
+                map.removeLayer(osmLayer);
+                map.addLayer(satelliteLayer);
+            }
+        });
+        
+        // Layer controls
+        document.getElementById('layerSebelum').addEventListener('change', (e) => {
+            if (e.target.checked) {
+                map.addLayer(lahanSebelumLayer);
+            } else {
+                map.removeLayer(lahanSebelumLayer);
+            }
+            updateSelectAllLayers();
+        });
+        
+        document.getElementById('layerSesudah').addEventListener('change', (e) => {
+            if (e.target.checked) {
+                map.addLayer(lahanSesudahLayer);
+            } else {
+                map.removeLayer(lahanSesudahLayer);
+            }
+            updateSelectAllLayers();
+        });
+        
+        document.getElementById('layerGaris').addEventListener('change', (e) => {
+            if (e.target.checked) {
+                map.addLayer(garisPerpindahanLayer);
+            } else {
+                map.removeLayer(garisPerpindahanLayer);
+            }
+            updateSelectAllLayers();
+        });
+        
+        document.getElementById('selectAllLayers').addEventListener('change', (e) => {
+            const checked = e.target.checked;
+            document.getElementById('layerSebelum').checked = checked;
+            document.getElementById('layerSesudah').checked = checked;
+            document.getElementById('layerGaris').checked = checked;
+            
+            if (checked) {
+                map.addLayer(lahanSebelumLayer);
+                map.addLayer(lahanSesudahLayer);
+                map.addLayer(garisPerpindahanLayer);
+            } else {
+                map.removeLayer(lahanSebelumLayer);
+                map.removeLayer(lahanSesudahLayer);
+                map.removeLayer(garisPerpindahanLayer);
+            }
+        });
+        
+        function updateSelectAllLayers() {
+            const sebelum = document.getElementById('layerSebelum').checked;
+            const sesudah = document.getElementById('layerSesudah').checked;
+            const garis = document.getElementById('layerGaris').checked;
+            document.getElementById('selectAllLayers').checked = sebelum && sesudah && garis;
+        }
+        
+        // Nama controls
+        document.getElementById('selectAllNama').addEventListener('change', (e) => {
+            const checked = e.target.checked;
+            if (checked) {
+                namaList.forEach(name => selectedNama.add(name));
+            } else {
+                selectedNama.clear();
+            }
+            renderNamaList();
+            renderLayers();
+            updateSummary();
+        });
+        
+        function updateSelectAllNama() {
+            document.getElementById('selectAllNama').checked = selectedNama.size === namaList.length;
+            updateSummary();
+        }
+        
+        document.getElementById('searchNama').addEventListener('input', () => {
+            renderNamaList();
+        });
+        
+        // Load data on start
+        loadData();
+    </script>
+</body>
+</html>
