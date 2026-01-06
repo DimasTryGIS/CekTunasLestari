@@ -296,6 +296,39 @@
         let namaList = [];
         let selectedNama = new Set();
         
+        // ===== FUNGSI KONVERSI ARCGIS KE GEOJSON (BARU) =====
+        function convertArcGISToGeoJSON(arcgisData) {
+            if (!arcgisData.features) return { type: 'FeatureCollection', features: [] };
+            
+            const features = arcgisData.features.map(feature => {
+                // Konversi geometry untuk Polygon
+                let geometry = null;
+                if (feature.geometry && feature.geometry.rings) {
+                    geometry = {
+                        type: 'Polygon',
+                        coordinates: feature.geometry.rings
+                    };
+                } else if (feature.geometry && feature.geometry.paths) {
+                    // Untuk LineString
+                    geometry = {
+                        type: 'LineString',
+                        coordinates: feature.geometry.paths[0] || []
+                    };
+                }
+                
+                return {
+                    type: 'Feature',
+                    properties: feature.attributes || {},
+                    geometry: geometry
+                };
+            });
+            
+            return {
+                type: 'FeatureCollection',
+                features: features
+            };
+        }
+        
         // Fungsi untuk mengambil nama dari feature dengan prioritas berbeda
         function getNamaFromFeature(feature, source) {
             const props = feature.properties || {};
@@ -315,7 +348,7 @@
             return props.NAMA || props.Nama || props.nama || props.Nama_Pekeb || props.NAMA_1;
         }
         
-        // Load GeoJSON data
+        // Load GeoJSON data (DIMODIFIKASI)
         async function loadData() {
             try {
                 console.log('Memulai load data...');
@@ -324,6 +357,13 @@
                     fetch('./Lahan_Pengusulan.json').then(r => {
                         if (!r.ok) throw new Error(`HTTP error! status: ${r.status}`);
                         return r.json();
+                    }).then(data => {
+                        // Konversi jika format ArcGIS
+                        if (data.features && data.features[0] && data.features[0].attributes) {
+                            console.log('Converting Lahan_Pengusulan from ArcGIS format...');
+                            return convertArcGISToGeoJSON(data);
+                        }
+                        return data;
                     }).catch(e => {
                         console.error('Error loading Lahan_Pengusulan:', e);
                         return { type: 'FeatureCollection', features: [] };
@@ -332,6 +372,13 @@
                     fetch('./Lahan_Perbaikan.json').then(r => {
                         if (!r.ok) throw new Error(`HTTP error! status: ${r.status}`);
                         return r.json();
+                    }).then(data => {
+                        // Konversi jika format ArcGIS
+                        if (data.features && data.features[0] && data.features[0].attributes) {
+                            console.log('Converting Lahan_Perbaikan from ArcGIS format...');
+                            return convertArcGISToGeoJSON(data);
+                        }
+                        return data;
                     }).catch(e => {
                         console.error('Error loading Lahan_Perbaikan:', e);
                         return { type: 'FeatureCollection', features: [] };
@@ -340,6 +387,13 @@
                     fetch('./Garis_Perpindahan.json').then(r => {
                         if (!r.ok) throw new Error(`HTTP error! status: ${r.status}`);
                         return r.json();
+                    }).then(data => {
+                        // Konversi jika format ArcGIS
+                        if (data.features && data.features[0] && data.features[0].attributes) {
+                            console.log('Converting Garis_Perpindahan from ArcGIS format...');
+                            return convertArcGISToGeoJSON(data);
+                        }
+                        return data;
                     }).catch(e => {
                         console.error('Error loading Garis_Perpindahan:', e);
                         return { type: 'FeatureCollection', features: [] };
